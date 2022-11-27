@@ -372,6 +372,30 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
     }
     return NULL;          // (8) return page table entry
 #endif
+
+    pde_t *pdep = pgdir + PDX(la);;   // (1) find page directory entry
+    pte_t *ptep = NULL;
+    if (!(*pdep & PTE_P)) {     // (2) check if entry is not present
+                          // (3) check if creating is needed, then alloc page for page table
+        struct Page *page = NULL;
+        if (create && (page = alloc_page())) {
+                          // CAUTION: this page is used for page table, not for common data page
+                          // (4) set page reference
+            set_page_ref(page ,1);
+            uintptr_t pagela = KADDR(page2pa(page)); // (5) get linear address of page
+            memset(pagela, 0, PGSIZE);
+                          // (6) clear page content using memset
+
+                          // (7) set page directory entry's permission
+            *pdep = PADDR(pagela) + (PTE_P | PTE_U | PTE_W);
+            ptep =(pte_t *)KADDR(PDE_ADDR(pdep[0])) + PTX(la);
+        }
+    }
+    else {
+        ptep = (pte_t *)KADDR(PDE_ADDR(pdep[0])) + PTX(la);
+    }
+    return ptep;          // (8) return page table entry
+
 }
 
 //get_page - get related Page struct for linear address la using PDT pgdir
@@ -417,6 +441,22 @@ page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep) {
                                   //(6) flush tlb
     }
 #endif
+    pde_t* pdep = pgdir + PDX(la);
+    if (*pdep & PTE_P) {                      //(1) check if this page table entry is present
+        pte_t* ptep = (pte_t*)KADDR(PDE_ADDR(*pdep)) + PTX(la);
+        struct Page *page = pte2page(*ptep); //(2) find corresponding page to pte
+        pde_t *ptmp  = ((pde_t *)PGADDR(PDX(la), PDX(la), 0));
+        uintptr_t pa =  page_ref_dec(page);                          //(3) decrease page reference
+        if (page->ref == 0) {
+                                  //(4) and free this page when page reference reachs 0
+            free_page(page);
+                                  //(5) clear second page table entry
+            *ptep = 0;
+                                  //(6) flush tlb
+            tlb_invalidate(pgdir, la);
+        }
+    }
+
 }
 
 //page_remove - free an Page which is related linear address la and has an validated pte
