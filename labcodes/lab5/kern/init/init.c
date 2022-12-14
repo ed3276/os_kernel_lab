@@ -48,7 +48,7 @@ kern_init(void) {
 
     //LAB1: CAHLLENGE 1 If you try to do it, uncomment lab1_switch_test()
     // user/kernel mode switch test
-    //lab1_switch_test();
+    lab1_switch_test();
     
     cpu_idle();                 // run idle process
 }
@@ -94,11 +94,41 @@ lab1_print_cur_status(void) {
 static void
 lab1_switch_to_user(void) {
     //LAB1 CHALLENGE 1 : TODO
+    //pl0 -> pl0, stack not changed, need manually calcutate ss:esp to simulate iret pl0 -> pl3
+    asm volatile (
+            "xorl %eax, %eax;"
+            "movw %ss, %ax;"
+            "movl %esp, %ebx;"
+            "pushl %eax;"
+            "pushl %ebx;"
+    );
+    asm volatile (
+        "int %0;"
+        :: "i" (T_SWITCH_TOU)
+    );
 }
 
 static void
 lab1_switch_to_kernel(void) {
     //LAB1 CHALLENGE 1 :  TODO
+    uintptr_t esp;
+    asm volatile (
+        "movl %%esp, %0"
+        : "=m" (esp)
+    );
+    load_esp0(esp);
+    cprintf("esp = 0x%x\n", esp);
+
+    current->need_resched = 0;
+    asm volatile (
+        "int %0;"
+        :: "i" (T_SWITCH_TOK)
+    );
+    asm volatile (
+        "movl 4(%esp), %eax;"
+        "movw %ax, %ss;"
+        "popl %esp;"
+    );
 }
 
 static void
