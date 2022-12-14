@@ -227,7 +227,6 @@ trap_dispatch(struct trapframe *tf) {
             }
         }
 
-        load_esp0((uintptr_t)tf->tf_esp);
         tf->tf_cs = USER_CS;
         tf->tf_ds = USER_DS;
         tf->tf_es = USER_DS;
@@ -257,7 +256,6 @@ trap_dispatch(struct trapframe *tf) {
         tf->tf_ds = KERNEL_DS;
         tf->tf_es = KERNEL_DS;
         tf->tf_eflags &= ~FL_IOPL_3;
-        break;
         break;
     case IRQ_OFFSET + IRQ_IDE1:
     case IRQ_OFFSET + IRQ_IDE2:

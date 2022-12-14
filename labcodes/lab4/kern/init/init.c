@@ -109,6 +109,12 @@ lab1_switch_to_user(void) {
 static void
 lab1_switch_to_kernel(void) {
     //LAB1 CHALLENGE 1 :  TODO
+    uintptr_t esp;
+    asm volatile (
+        "movl %%esp, %0"
+        : "=m" (esp)
+    );
+    load_esp0(esp);
     asm volatile (
         "int $121;"
         "movl 4(%esp), %eax;"
