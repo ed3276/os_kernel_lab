@@ -27,6 +27,8 @@ static void print_ticks() {
 #endif
 }
 
+extern uint32_t __vectors[];
+
 /* *
  * Interrupt descriptor table:
  *
@@ -54,6 +56,15 @@ idt_init(void) {
       *     You don't know the meaning of this instruction? just google it! and check the libs/x86.h to know more.
       *     Notice: the argument of lidt is idt_pd. try to find it!
       */
+    uint32_t i = 0;
+    for (; i < IRQ_OFFSET; ++i) {
+        SETGATE(idt[i], 1, 0x8, __vectors[i], 0);
+    }
+    for (; i < 256; ++i) {
+        SETGATE(idt[i], 0, 0x8, __vectors[i], 3);
+    }
+
+    lidt(&idt_pd);
      /* LAB5 YOUR CODE */ 
      //you should update your lab1 code (just add ONE or TWO lines of code), let user app to use syscall to get the service of ucore
      //so you should setup the syscall interrupt gate in here
@@ -229,6 +240,14 @@ trap_dispatch(struct trapframe *tf) {
          * IMPORTANT FUNCTIONS:
 	     * sched_class_proc_tick
          */
+        ++ticks;
+        if (ticks % TICK_NUM == 0) {
+            //ticks = 0;
+            //print_ticks();
+            cprintf("%d ticks\n",TICK_NUM);
+        }
+
+        sched_class_proc_tick(current);
         break;
     case IRQ_OFFSET + IRQ_COM1:
         c = cons_getc();
@@ -240,8 +259,51 @@ trap_dispatch(struct trapframe *tf) {
         break;
     //LAB1 CHALLENGE 1 : YOUR CODE you should modify below codes.
     case T_SWITCH_TOU:
+        {
+            uintptr_t la_beg = (uintptr_t)KERNBASE;
+            uintptr_t la_end = (uintptr_t)(KERNBASE + 0x400000);
+            pte_t * const vpt = (pte_t *)VPT;
+            extern pde_t __boot_pgdir;
+            pde_t *boot_pgdir = &__boot_pgdir;
+            while (la_beg != la_end) {
+                if (vpt[PPN(la_beg)]) {
+                    vpt[PPN(la_beg)] |= PTE_U;
+                    tlb_invalidate(boot_pgdir, la_beg);
+                }
+                la_beg += PGSIZE;
+            }
+        }
+
+        tf->tf_cs = USER_CS;
+        tf->tf_ss = USER_DS;
+        tf->tf_ds = USER_DS;
+        tf->tf_es = USER_DS;
+        tf->tf_eflags |= FL_IOPL_3;
+
+        break;
     case T_SWITCH_TOK:
-        panic("T_SWITCH_** ??\n");
+        //panic("T_SWITCH_** ??\n");
+        {
+            uintptr_t la_beg = (uintptr_t)KERNBASE;
+            uintptr_t la_end = (uintptr_t)(KERNBASE + 0x400000);
+            pte_t * const vpt = (pte_t *)VPT;
+            extern pde_t __boot_pgdir;
+            pde_t *boot_pgdir = &__boot_pgdir;
+            while (la_beg != la_end) {
+                if (vpt[PPN(la_beg)]) {
+                    vpt[PPN(la_beg)] &= ~PTE_U;
+                    tlb_invalidate(boot_pgdir, la_beg);
+                }
+                la_beg += PGSIZE;
+            }
+        }
+
+        tf->tf_cs = KERNEL_CS;
+        tf->tf_ss = KERNEL_DS;
+        tf->tf_ds = KERNEL_DS;
+        tf->tf_es = KERNEL_DS;
+        tf->tf_eflags &= ~FL_IOPL_3;
+
         break;
     case IRQ_OFFSET + IRQ_IDE1:
     case IRQ_OFFSET + IRQ_IDE2:
